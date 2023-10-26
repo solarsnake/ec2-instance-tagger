@@ -11,7 +11,7 @@ This script sets up an AWS Lambda function that tags EC2 instances based on thei
 
 ## Usage
 
-## Deployment
+### Deployment
 
 To deploy the Lambda function and associated resources for every valid profile in ~/.aws/credentials, simply run:
 
@@ -25,7 +25,7 @@ This will:
 - Deploy the Lambda function (EC2Tagger) that will handle the EC2 instance tagging.
 - Set up a CloudWatch Events rule (EC2LaunchRule) to trigger the Lambda function whenever an EC2 instance is launched.
 
-## Reversion
+### Reversion
 
 To remove the resources created by this script for every valid profile:
 
