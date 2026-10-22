@@ -47,6 +47,31 @@ run "defaults" {
   }
 
   assert {
+    condition     = one([for s in jsondecode(local.policy).Statement : s.Resource if s.Sid == "WriteLogs"]) == "arn:aws-us-gov:logs:us-gov-west-1:123456789012:log-group:/aws/lambda/ec2-instance-tagger:*"
+    error_message = "WriteLogs must be scoped to the function log group."
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(local.policy).Statement : s.Action if s.Sid == "WriteLogs"]) == ["logs:CreateLogStream", "logs:PutLogEvents"]
+    error_message = "WriteLogs must allow exactly CreateLogStream and PutLogEvents."
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(local.policy).Statement : s.Action if s.Sid == "DescribeInstances"]) == "ec2:DescribeInstances"
+    error_message = "DescribeInstances must allow only ec2:DescribeInstances."
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(local.policy).Statement : s.Resource if s.Sid == "DescribeInstances"]) == "*"
+    error_message = "DescribeInstances must apply to all resources."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(local.policy).Statement : s if s.Resource == "*" && s.Sid != "DescribeInstances"]) == 0
+    error_message = "Only DescribeInstances may use a wildcard resource."
+  }
+
+  assert {
     condition     = aws_lambda_function.this.environment[0].variables.OVERWRITE_EXISTING == "false"
     error_message = "OVERWRITE_EXISTING must default to false."
   }
