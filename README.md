@@ -75,6 +75,11 @@ When nothing is tagged, `action` is `skipped` and `reason` is one of:
 One module instance covers one region, because EventBridge rules are regional. The IAM role name is global, so use a different `name_prefix` for each additional region:
 
 ```hcl
+provider "aws" {
+  alias  = "usw2"
+  region = "us-west-2"
+}
+
 module "ec2_instance_tagger_usw2" {
   source      = "github.com/solarsnake/ec2-instance-tagger"
   name_prefix = "ec2-instance-tagger-usw2"
