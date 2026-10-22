@@ -80,6 +80,49 @@ run "defaults" {
     condition     = aws_cloudwatch_log_group.this.retention_in_days == 30
     error_message = "Log retention must default to 30 days."
   }
+
+  assert {
+    condition     = length(jsondecode(local.policy).Statement) == 3
+    error_message = "The policy must have exactly three statements."
+  }
+
+  assert {
+    condition     = aws_lambda_function.this.environment[0].variables.TAG_KEY == "os"
+    error_message = "TAG_KEY must default to os."
+  }
+
+  assert {
+    condition     = aws_lambda_function.this.environment[0].variables.SKIP_EKS_NODES == "true"
+    error_message = "SKIP_EKS_NODES must default to true."
+  }
+}
+
+run "tags_applied" {
+  command = plan
+
+  variables {
+    tags = { team = "platform" }
+  }
+
+  assert {
+    condition     = aws_cloudwatch_log_group.this.tags.team == "platform"
+    error_message = "Tags must be applied to the log group."
+  }
+
+  assert {
+    condition     = aws_iam_role.this.tags.team == "platform"
+    error_message = "Tags must be applied to the IAM role."
+  }
+
+  assert {
+    condition     = aws_lambda_function.this.tags.team == "platform"
+    error_message = "Tags must be applied to the Lambda function."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_rule.this.tags.team == "platform"
+    error_message = "Tags must be applied to the event rule."
+  }
 }
 
 run "boundary_applied_when_set" {
@@ -138,4 +181,14 @@ run "rejects_bad_retention" {
   }
 
   expect_failures = [var.log_retention_days]
+}
+
+run "rejects_bad_name_prefix" {
+  command = plan
+
+  variables {
+    name_prefix = "bad name!"
+  }
+
+  expect_failures = [var.name_prefix]
 }

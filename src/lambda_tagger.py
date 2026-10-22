@@ -2,11 +2,15 @@
 
 import json
 import os
+import time
 
 import boto3
 from botocore.exceptions import ClientError
 
 EKS_TAGS = ("eks:nodegroup-name", "eks:cluster-name", "karpenter.sh/nodepool")
+
+DESCRIBE_ATTEMPTS = 3
+_sleep = time.sleep
 
 
 def classify_platform(platform_details: str | None) -> str:
@@ -53,15 +57,22 @@ def lambda_handler(event: dict, context) -> dict:
         return decide(None, "skipped", "bad-event")
 
     ec2 = _ec2_client()
-    try:
-        response = ec2.describe_instances(InstanceIds=[instance_id])
-    except ClientError as err:
-        if err.response.get("Error", {}).get("Code") == "InvalidInstanceID.NotFound":
-            return decide(instance_id, "skipped", "not-found")
-        _log(tag_key, instance_id=instance_id, action="error", error=str(err))
-        raise
-
-    instances = [i for r in response.get("Reservations", []) for i in r.get("Instances", [])]
+    # A just-launched instance can be briefly invisible (eventual consistency),
+    # so NotFound and empty results are retried with a 1 s then 2 s back-off.
+    instances = []
+    for attempt in range(1, DESCRIBE_ATTEMPTS + 1):
+        try:
+            response = ec2.describe_instances(InstanceIds=[instance_id])
+        except ClientError as err:
+            if err.response.get("Error", {}).get("Code") != "InvalidInstanceID.NotFound":
+                _log(tag_key, instance_id=instance_id, action="error", error=str(err))
+                raise
+            response = {}
+        instances = [i for r in response.get("Reservations", []) for i in r.get("Instances", [])]
+        if instances:
+            break
+        if attempt < DESCRIBE_ATTEMPTS:
+            _sleep(attempt)
     if not instances:
         return decide(instance_id, "skipped", "not-found")
     instance = instances[0]

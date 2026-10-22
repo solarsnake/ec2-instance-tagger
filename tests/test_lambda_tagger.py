@@ -15,6 +15,7 @@ EVENT = {"detail": {"instance-id": IID}}
 def stubbed(monkeypatch):
     client = boto3.client("ec2", region_name="us-east-1")
     monkeypatch.setattr(lambda_tagger, "_ec2_client", lambda: client)
+    monkeypatch.setattr(lambda_tagger, "_sleep", lambda _seconds: None)
     for var in ("TAG_KEY", "OVERWRITE_EXISTING", "SKIP_EKS_NODES"):
         monkeypatch.delenv(var, raising=False)
     with Stubber(client) as stubber:
@@ -115,7 +116,8 @@ def test_existing_tag_overwritten_when_enabled(stubbed, monkeypatch):
 
 
 def test_not_found_error_is_skipped(stubbed):
-    stubbed.add_client_error("describe_instances", "InvalidInstanceID.NotFound")
+    for _ in range(3):
+        stubbed.add_client_error("describe_instances", "InvalidInstanceID.NotFound")
     result = lambda_tagger.lambda_handler(EVENT, None)
     assert result == {
         "instance_id": IID,
@@ -126,11 +128,43 @@ def test_not_found_error_is_skipped(stubbed):
     stubbed.assert_no_pending_responses()
 
 
+def test_not_found_then_success_is_tagged(stubbed):
+    stubbed.add_client_error("describe_instances", "InvalidInstanceID.NotFound")
+    stubbed.add_response("describe_instances", instance("Windows"), {"InstanceIds": [IID]})
+    expect_tag(stubbed, "os", "windows")
+    result = lambda_tagger.lambda_handler(EVENT, None)
+    assert result["action"] == "tagged"
+    assert result["value"] == "windows"
+    stubbed.assert_no_pending_responses()
+
+
+def test_not_found_retries_exactly_three_describe_calls(stubbed, monkeypatch):
+    delays = []
+    monkeypatch.setattr(lambda_tagger, "_sleep", delays.append)
+    for _ in range(3):
+        stubbed.add_client_error("describe_instances", "InvalidInstanceID.NotFound")
+    result = lambda_tagger.lambda_handler(EVENT, None)
+    assert result["reason"] == "not-found"
+    assert delays == [1, 2]
+    stubbed.assert_no_pending_responses()
+
+
 def test_empty_reservations_is_skipped(stubbed):
-    stubbed.add_response("describe_instances", {"Reservations": []}, {"InstanceIds": [IID]})
+    for _ in range(3):
+        stubbed.add_response("describe_instances", {"Reservations": []}, {"InstanceIds": [IID]})
     result = lambda_tagger.lambda_handler(EVENT, None)
     assert result["action"] == "skipped"
     assert result["reason"] == "not-found"
+    stubbed.assert_no_pending_responses()
+
+
+def test_other_describe_error_is_logged_and_raised(stubbed, capsys):
+    stubbed.add_client_error("describe_instances", "UnauthorizedOperation")
+    with pytest.raises(ClientError):
+        lambda_tagger.lambda_handler(EVENT, None)
+    parsed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert parsed["action"] == "error"
+    assert parsed["instance_id"] == IID
     stubbed.assert_no_pending_responses()
 
 
@@ -151,7 +185,9 @@ def test_create_tags_error_is_logged_and_raised(stubbed, capsys):
     stubbed.add_client_error("create_tags", "RequestLimitExceeded")
     with pytest.raises(ClientError):
         lambda_tagger.lambda_handler(EVENT, None)
-    assert "error" in capsys.readouterr().out
+    parsed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert parsed["action"] == "error"
+    assert parsed["instance_id"] == IID
     stubbed.assert_no_pending_responses()
 
 

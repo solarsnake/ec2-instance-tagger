@@ -2,6 +2,11 @@ variable "name_prefix" {
   description = "Name used for the Lambda function, IAM role, log group and as the prefix of the EventBridge rule."
   type        = string
   default     = "ec2-instance-tagger"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{1,47}$", var.name_prefix))
+    error_message = "name_prefix must be 1-47 characters of letters, digits, hyphen or underscore."
+  }
 }
 
 variable "tag_key" {

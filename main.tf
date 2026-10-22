@@ -42,6 +42,8 @@ data "archive_file" "lambda" {
   type        = "zip"
   source_file = "${path.module}/src/lambda_tagger.py"
   output_path = "${path.module}/build/lambda_tagger.zip"
+
+  output_file_mode = "0644"
 }
 
 resource "aws_cloudwatch_log_group" "this" {

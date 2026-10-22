@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -26,3 +29,5 @@ jobs:
       - run: terraform init -backend=false
       - run: terraform validate
       - run: terraform test
+      - run: terraform -chdir=examples/basic init -backend=false
+      - run: terraform -chdir=examples/basic validate
