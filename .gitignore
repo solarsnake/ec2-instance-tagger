@@ -1,1 +1,9 @@
 *.zip
+build/
+.terraform/
+.terraform.lock.hcl
+*.tfstate*
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
